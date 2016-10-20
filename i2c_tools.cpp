@@ -3,6 +3,7 @@
  i2c tools for Arduino
  */
 
+#include "../ESP8266-Arduino-Makefile/arduino/hardware/arduino/avr/cores/arduino/Arduino.h"
 #include <Arduino.h>
 #include <Wire.h>
 
@@ -20,6 +21,7 @@
 #define COMMAND_HELP 4
 #define COMMAND_SET_VAR 5
 #define COMMAND_GET_VAR 6
+#define COMMAND_UPLOAD 7
 
 #define VAR_SPEED 0
 
@@ -46,6 +48,7 @@
 #define ARG_MAX_COUNT 4
 
 #define ASCCI_NL 0x0A
+#define COMMAND_LINE_END ASCCI_NL
 #define ASCCI_CR 0x0D
 
 #define DATA_LENGTH 256
@@ -96,10 +99,12 @@ void setup() {
 void loop() {
 	static int16_t buffer_pos = 0;
 	int temp = 0;
+	memset(serialbuffer, 0, sizeof(serialbuffer));
+	buffer_pos = Serial.readBytesUntil(COMMAND_LINE_END, serialbuffer, SERIALBUFFER_LENGTH);
 
-	buffer_pos = Serial.readBytesUntil(ASCCI_NL, serialbuffer, SERIALBUFFER_LENGTH);
-
-	if (buffer_pos > 0) {
+	if (strlen(serialbuffer) > 0 && buffer_pos > 0) {
+		Serial.print(F("\r\nYou entered: "));
+		Serial.println(serialbuffer);
 #if (DEBUG == 1)
 		Serial.print(F("ECHO: "));
 		Serial.write((byte*)serialbuffer, buffer_pos); //
@@ -112,7 +117,10 @@ void loop() {
 			Serial.println(temp);
 			Serial.println();
 #endif
-			printHelp();
+			Serial.print(F("Unknown command: \""));
+			Serial.print(serialbuffer);
+			Serial.println(F("\" -- press 'h' for help"));
+//			printHelp();
 
 		}
 		buffer_pos = 0;
@@ -127,7 +135,7 @@ void serialFlush() {
 	}
 }
 
-//return 0 on succses
+//return 0 on succees
 // > 0 on error
 byte handelCommand(char* buffer, int16_t buffer_length) {
 	int8_t command = -1, arg_count = 0;
@@ -140,9 +148,11 @@ byte handelCommand(char* buffer, int16_t buffer_length) {
 	else if (serialbuffer[pos] == '1') command = COMMAND_DUMP;
 	else if (serialbuffer[pos] == '2') command = COMMAND_GET;
 	else if (serialbuffer[pos] == '3') command = COMMAND_SET;
-	else if ((serialbuffer[pos] == 'h') || (serialbuffer[pos] == 'H')) command = COMMAND_HELP;
-	else if ((serialbuffer[pos] == 's') || (serialbuffer[pos] == 's')) command = COMMAND_SET_VAR;
-	else if ((serialbuffer[pos] == 'g') || (serialbuffer[pos] == 'g')) command = COMMAND_GET_VAR;
+	else if (serialbuffer[pos] == '4') command = COMMAND_UPLOAD;
+	else if ((serialbuffer[pos] == 'h') || (serialbuffer[pos] == 'H') || (serialbuffer[pos] == '?')) command =
+	COMMAND_HELP;
+	else if ((serialbuffer[pos] == 's') || (serialbuffer[pos] == 'S')) command = COMMAND_SET_VAR;
+	else if ((serialbuffer[pos] == 'g') || (serialbuffer[pos] == 'G')) command = COMMAND_GET_VAR;
 	else return 2;
 	pos++;
 
@@ -159,7 +169,7 @@ byte handelCommand(char* buffer, int16_t buffer_length) {
 
 	//find all arguments and store this in arg[]
 	while ((pos < buffer_length) && (arg_count < ARG_MAX_COUNT)) {
-		//if ther is an new line break the loop
+		//if there is an new line break the loop
 		if ((serialbuffer[pos] == ASCCI_NL) || (serialbuffer[pos++] == ASCCI_CR)) {
 			break;
 		}
@@ -312,45 +322,41 @@ int16_t read_number(char* buffer, int16_t buffer_length, int16_t pos, int32_t* n
 void printHelp(void) {
 	Serial.println(F("                       i2c-tools Help Page"));
 	Serial.println(F("===================================================================="));
-	Serial.println(F("Command's :"));
-	Serial.println(F("0 = i2cdetect"));
-	Serial.println(F("1 = i2cdump"));
-	Serial.println(F("2 = i2cget"));
-	Serial.println(F("3 = i2cset"));
-	Serial.println(F("g = get a variable"));
-	Serial.println(F("s = set a variable"));
-	Serial.println(F("h = show this help page"));
+	Serial.println(F("Commands:"));
+	Serial.println(F("0   = i2cdetect        1 = i2cdump"));
+	Serial.println(F("2   = i2cget           3 = i2cset"));
+	Serial.println(F("g   = get a variable   s = set a variable"));
+	Serial.println(F("bmcy = write Ricoh [b]lack, [m]agenta, [c]yan, [y]ellow toner cart."));
+	Serial.println(F("h/? = show this help page"));
 	Serial.println();
 	Serial.println(F("i2cdetect [start stop [mode]]"));
-	Serial.println(F("     Mode's:"));
+	Serial.println(F("     Modes:"));
 	Serial.println(F("     0 = Fast detect, send a start condition"));
 	Serial.println(F("     1 = Just try to read"));
 	Serial.println(F("     2 = Send a single write 0x00 on the bus"));
 	Serial.println(F("     3 = Send a single write 0x00, and try to read a register"));
+	Serial.println(F("  Example: '0 0x20 0x50'"));
+	Serial.println(F("  Detects devices from address 0x20 to 0x50"));
 	Serial.println();
 	Serial.println(F("i2cdump address [start stop [mode]]"));
-	Serial.println(F("     Mode's:"));
+	Serial.println(F("     Modes:"));
 	Serial.println(F("     0 = Read one register at once"));
 	Serial.println(F("     1 = Use for devices with auto increment"));
 	Serial.println(F("     2 = Read one register at once, Do not send write comand"));
 	Serial.println(F("     3 = Use for devices with auto increment, Do not send write command"));
 	Serial.println();
 	Serial.println(F("i2cget address [register]"));
-	Serial.println();
 	Serial.println(F("i2cset address [register [value]]"));
-	Serial.println();
-	Serial.println(F("Example: '0 0x20 0x50'"));
-	Serial.println(F("Detects devicecs from addres 0x20 to 0x50"));
-	Serial.println();
 	Serial.println(F("get var"));
 	Serial.println(F("set var value"));
+	Serial.println();
 	Serial.println(F("     Variables:"));
 	Serial.println(
 			F("     0 = clk speed 1 - 400000(It can be set to higher speed, but it is not recommended)"));
 	Serial.println();
 	Serial.println(F("All numbers can types as bin/hex/dec, except the command number"));
+//	Serial.println(F("Set your terminal to 'LF' line ending"));
 	Serial.println();
-	Serial.println(F("Set your terminal to 'LF' line ending"));
 }
 
 void VarSet(byte var, int32_t value) {
